@@ -1,0 +1,28 @@
+# Generated orchestration state
+orchestrator-state/
+memory/
+checkpoints/
+contexts/
+transcripts/
+
+# Local test and work artifacts
+work/
+scratch/
+*.lock
+*.log
+*.tmp
+*.bak
+
+# Credentials and local environment
+.env
+.env.*
+*.key
+*.pem
+credentials.json
+secrets.json
+
+# Editor and OS metadata
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

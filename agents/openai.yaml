@@ -1,0 +1,4 @@
+interface:
+  display_name: "Adaptive Task Orchestrator"
+  short_description: "Route difficult work, memory, documents, and long tasks"
+  default_prompt: "Use $adaptive-task-orchestrator to analyze and execute this complex or long-running task."
