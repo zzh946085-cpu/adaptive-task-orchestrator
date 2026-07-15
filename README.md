@@ -80,6 +80,7 @@ Those features remain capability-gated and require a supporting client, automati
 
 - `docs/build-report.md` — v2 architecture, requirement mapping, tests, strict score, and remaining limits.
 - `docs/source-map-gap-analysis.md` — comparison with the `claude-code-sourcemap` structure and reusable design ideas.
+- `docs/upload-assessment.md` — upload scope, verification evidence, current risks, and release recommendations.
 
 ## Privacy
 
