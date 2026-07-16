@@ -66,7 +66,9 @@ Do not create separate event, row, checkpoint, or capability input files before 
 
 Order rows topologically: each dependency must appear before the row that names it.
 
-The bootstrap is idempotent for an identical completed bundle hash and re-verifies memory and task state before returning it. It refuses a different or partial state at the same root and records failure in `orchestrator-state/bootstrap-status.json`.
+The bootstrap is idempotent for an identical completed bundle hash and re-verifies memory and task state before returning it. Identical concurrent callers serialize on `orchestrator-state/locks/bootstrap.lock`; the first creates state and followers return the same verified handoff. It refuses a different or partial state at the same root and records failure in `orchestrator-state/bootstrap-status.json`.
+
+Windows path-budget validation runs before the bootstrap creates state. Use a shorter task root when the projected checkpoint path exceeds the safe budget.
 
 Use `orchestrator-state/handoff-manifest.json` as the stable resume entrypoint. Read it before traversing individual state directories.
 

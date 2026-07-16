@@ -29,6 +29,8 @@ Invoke the script on Windows with a process-scoped policy override:
 powershell -NoProfile -ExecutionPolicy Bypass -File "<skill>/scripts/memory-ledger.ps1" <arguments>
 ```
 
+Mutations default to a 30-second lock deadline with exponential backoff and jitter. Use `-LockTimeoutSeconds` only to tune bounded waiting; use [concurrency-and-recovery.md](concurrency-and-recovery.md) for mutation queues and sharding.
+
 Prefer `-InputFile` or redirected standard input over `-Text` for multiline or sensitive content.
 
 ## State objects and layout
@@ -64,6 +66,10 @@ Use four distinct objects:
 - `transcript entry`: audit and lineage reference, not default context.
 
 All stored objects use schema version 2 and stable IDs. Writes use same-directory temporary files and atomic replacement. Mutations acquire an exclusive ledger lock.
+
+Descendant Junctions, symbolic links, and other reparse points are rejected before a write path is used. Treat the explicitly supplied root as the trusted boundary.
+
+On Windows, deep paths are checked against a conservative 248-character budget. Choose a shorter explicit root when preflight rejects a path; do not wait for a partial checkpoint write to fail.
 
 ## Initialize and append
 

@@ -47,11 +47,21 @@ Update through valid transitions:
 
 ```powershell
 ... -Operation UpdateRow -TaskFile "<task.json>" -RowId T1 -Status active
-... -Operation RecordEvidence -TaskFile "<task.json>" -RowId T1 -EvidencePath "<path-or-id>"
+... -Operation RecordEvidence -TaskFile "<task.json>" -RowId T1 `
+  -OwnerId "<owner>" -AttemptId "<attempt>" -EvidencePath "<path-or-id>"
 ... -Operation UpdateRow -TaskFile "<task.json>" -RowId T1 -Status passed
 ```
 
 The ledger refuses activation before dependencies and permissions are ready, refuses `passed` without evidence, and refuses simultaneous active mutation rows.
+
+Activation returns an owner, attempt, lease expiry, and fencing token. Renew long attempts before expiry:
+
+```powershell
+... -Operation RenewLease -TaskFile "<task.json>" -RowId T1 `
+  -OwnerId "<owner>" -AttemptId "<attempt>" -LeaseSeconds 900
+```
+
+For same-ledger mutation bursts, use the ordered batch protocol in [concurrency-and-recovery.md](concurrency-and-recovery.md).
 
 Verify and export:
 

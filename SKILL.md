@@ -1,6 +1,6 @@
 ---
 name: adaptive-task-orchestrator
-description: Orchestrate difficult, high-risk, multi-artifact, or cross-session work with explicit task state, capability routing, checkpoints, compressed memory, recovery, and reverse-goal verification. Use when the work has multiple dependent stages, requires a difficult proof or architecture decision, is likely to cross sessions, requests memory/resumption/scheduling, or contains consequential and difficult-to-reverse actions. Do not invoke automatically for routine one-step answers, ordinary summaries, or short plans; allow explicit $adaptive-task-orchestrator invocation for those cases.
+description: Orchestrate difficult, high-risk, multi-artifact, or cross-session work with compact reasoning maps, explicit task state, capability routing, checkpoints, compressed memory, recovery, and reverse-goal verification. Use when the work has multiple dependent stages, requires a difficult proof, code diagnosis, or architecture decision, is likely to cross sessions, requests memory/resumption/scheduling, or explicitly asks for a prime-line reasoning map, forward/backward derivation, or thought scaffold. Do not invoke automatically for routine one-step answers, ordinary summaries, or short plans; allow explicit $adaptive-task-orchestrator invocation for those cases.
 ---
 
 # Adaptive Task Orchestrator
@@ -38,25 +38,38 @@ structural validation
 
 Do not bypass a failed stage by rewriting it as prose.
 
+## Use a bounded reasoning kernel
+
+Read [reasoning-kernel.md](references/reasoning-kernel.md) when the user asks for a thought scaffold or when mathematical, code, or causal relations need a visible main line and material branches.
+
+When changing routing, notation, or semantic guards, read [reasoning-evaluation.md](references/reasoning-evaluation.md) and run the bundled evaluation corpus. Keep structural validation separate from claims about answer correctness.
+
+Use `1`, `1'`, and `1''` for main, branch, and sub-branch nodes. Normalize `P` to `+`, use `->` for forward transformation, `<-` for backward requirements, and `|` for alternatives. Anchor the map with context and an observable goal.
+
+Do not output a hidden chain-of-thought. Return only the compact map, decisive rationale, validity conditions, and evidence that help the user verify the result. Do not use a map for a direct answer unless the user explicitly requests it.
+
 ## Route difficult reasoning
 
 ### Mathematics
 
-1. Define symbols, domain, assumptions, target quantity, precision, and admissible methods.
-2. Split the target into lemmas, transformations, or computable subproblems.
-3. Separate derivation from verification.
-4. Check dimensions, signs, boundary cases, convergence, and one independent route when feasible.
-5. Label proof, approximation, numerical evidence, and conjecture separately.
-6. Return validity conditions, expected behavior, error bounds when available, and useful equivalent forms.
+1. Extract objects, relations, environment, validity conditions, target or unknown, and output type.
+2. Classify the request as proof, solve, or exploration; never use a target value as an unverified premise.
+3. For nontrivial work, build from the given end and target end until they meet at a bridge lemma, transformation, or check.
+4. Define symbols, domain, assumptions, precision, and admissible methods.
+5. Separate derivation from verification and label proof, approximation, numerical evidence, and conjecture separately.
+6. Check dimensions, signs, boundary cases, convergence, and one independent route when feasible.
+7. Return the compact map when useful, then the result, validity conditions, expected behavior, error bounds, and equivalent forms.
 
 ### Code
 
-1. Inspect repository instructions, dirty state, dependencies, runtime, tests, and the smallest relevant path.
-2. Express the behavior as input, state transition, output, invariants, and failure cases.
-3. Preserve unrelated edits and existing conventions.
-4. Classify reads as parallel-safe only when independent; serialize mutations unless an adapter proves otherwise.
-5. Verify with focused tests first, then broader checks proportional to risk.
-6. Return changed paths, observed evidence, expected runtime effects, and remaining risk.
+1. Anchor repository, revision, runtime, role, user objective, and expected output.
+2. Map the observed input or failure forward through falsifiable hypotheses; map acceptance backward through required invariants and tests.
+3. Inspect the smallest path that can distinguish hypotheses and serve as the bridge between both ends.
+4. Express the behavior as input, state transition, output, invariants, and failure cases.
+5. Preserve unrelated edits and existing conventions.
+6. Classify reads as parallel-safe only when independent; serialize mutations unless an adapter proves otherwise.
+7. Verify with focused tests first, then broader checks proportional to risk.
+8. Return the compact map when useful, changed paths, observed evidence, expected runtime effects, and remaining risk.
 
 ## Keep four state objects separate
 
@@ -77,6 +90,10 @@ Follow [long-task-control.md](references/long-task-control.md). Give every task 
 
 Use `scripts/task-ledger.ps1` when level 2 or 3 work needs machine-checked task transitions, dependency readiness, evidence gating, or mutation serialization.
 
+Use the SQLite v3 runtime in [transactional-runtime.md](references/transactional-runtime.md) when concurrent writers share one task, several state objects must commit atomically, crash replay must be tested, or a task will remain active across repeated recovery cycles. Keep JSON v2 for portable, low-contention work. Never treat both backends as authoritative for the same task.
+
+Follow [concurrency-and-recovery.md](references/concurrency-and-recovery.md) when several workers, clients, retries, or mutation bursts can touch state. Use `scripts/sequential-writer.ps1` for same-ledger mutation batches. Treat each task file and memory purpose/content pair as one consistency partition.
+
 Apply these global rules:
 
 - Run independent `read_only` rows concurrently when the client supports it.
@@ -84,6 +101,8 @@ Apply these global rules:
 - Require a fresh checkpoint before irreversible or non-idempotent work.
 - Reinspect external state before retrying a resumed operation.
 - Allow only one active mutation row unless a tool-specific adapter proves isolation.
+- Bind evidence to the active attempt. Preserve its owner, lease, and fencing token across long-running work.
+- Bound per-ledger concurrency; prefer a warm single writer or independent shards over cold-process contention.
 
 ## Bound subagents
 
@@ -121,4 +140,4 @@ Before completion:
 6. Record durable decisions, final artifacts, unresolved risks, and the next action only if work remains.
 7. Return the result first, followed by evidence and limitations.
 
-Before shipping changes to this skill, run `scripts/self-test.ps1`. It must pass the bootstrap idempotency, dependency, evidence, memory, and task-ledger checks.
+Before shipping changes to this skill, run `scripts/reasoning-eval.ps1`, `scripts/self-test.ps1`, and `scripts/state-runtime-self-test.ps1`. They must pass routing and semantic-map regression, concurrent bootstrap, bounded paths, reparse protection, no-side-effect reads, attempt-bound evidence, lease/fencing, sequential writer, memory, task-ledger, transactional rollback, deterministic replay, outbox fencing, and WAL contention checks.

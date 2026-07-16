@@ -4,7 +4,13 @@ param(
     [string]$BundleFile,
 
     [Parameter(Mandatory = $true)]
-    [string]$Root
+    [string]$Root,
+
+    [ValidateRange(1, 600)]
+    [int]$LockTimeoutSeconds = 120,
+
+    [ValidateRange(10, 1000)]
+    [int]$LockRetryBaseMilliseconds = 40
 )
 
 Set-StrictMode -Version Latest
@@ -14,11 +20,64 @@ $memoryScript = Join-Path $PSScriptRoot 'memory-ledger.ps1'
 $taskScript = Join-Path $PSScriptRoot 'task-ledger.ps1'
 
 function ConvertTo-Slug {
-    param([string]$Value)
+    param([string]$Value, [ValidateRange(12, 120)][int]$MaxLength = 48)
     $slug = $Value.Trim().ToLowerInvariant() -replace '[^a-z0-9\p{L}\p{Nd}]+', '-'
     $slug = $slug.Trim('-') -replace '-{2,}', '-'
     if ([string]::IsNullOrWhiteSpace($slug)) { throw 'Task ID must contain a letter or digit.' }
+    if ($slug.Length -gt $MaxLength) {
+        $sha = [Security.Cryptography.SHA256]::Create()
+        try {
+            $hashBytes = $sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($Value))
+            $hash = ([BitConverter]::ToString($hashBytes) -replace '-', '').ToLowerInvariant().Substring(0, 8)
+        }
+        finally { $sha.Dispose() }
+        $prefix = $slug.Substring(0, $MaxLength - $hash.Length - 1).TrimEnd('-')
+        if ([string]::IsNullOrWhiteSpace($prefix)) { $prefix = 'task' }
+        $slug = "$prefix-$hash"
+    }
     return $slug
+}
+
+function Assert-SafeDescendantPath {
+    param([string]$Base, [string]$Candidate)
+    $baseDirectory = [IO.Path]::GetFullPath($Base).TrimEnd([IO.Path]::DirectorySeparatorChar)
+    $basePrefix = $baseDirectory + [IO.Path]::DirectorySeparatorChar
+    $candidateFull = [IO.Path]::GetFullPath($Candidate)
+    if (-not $candidateFull.StartsWith($basePrefix, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Path escapes bootstrap root: $candidateFull"
+    }
+    $current = $baseDirectory
+    $relative = $candidateFull.Substring($basePrefix.Length)
+    foreach ($segment in @($relative -split '[\\/]' | Where-Object { $_ })) {
+        $current = Join-Path $current $segment
+        if (Test-Path -LiteralPath $current) {
+            $item = Get-Item -LiteralPath $current -Force
+            if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "Path crosses a reparse point below the bootstrap root: $current"
+            }
+        }
+    }
+    return $candidateFull
+}
+
+function Enter-BootstrapLock {
+    param([string]$Path)
+    $deadline = [DateTime]::UtcNow.AddSeconds($LockTimeoutSeconds)
+    $attempt = 0
+    while ([DateTime]::UtcNow -lt $deadline) {
+        try {
+            return [IO.File]::Open($Path, [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+        }
+        catch [IO.IOException] {
+            $exponent = [Math]::Min($attempt, 5)
+            $maximum = [Math]::Min(1000, [int]($LockRetryBaseMilliseconds * [Math]::Pow(2, $exponent)))
+            $minimum = [Math]::Min($LockRetryBaseMilliseconds, $maximum)
+            $delay = if ($maximum -gt $minimum) { Get-Random -Minimum $minimum -Maximum ($maximum + 1) } else { $minimum }
+            Start-Sleep -Milliseconds $delay
+            $attempt++
+        }
+    }
+    throw "Timed out after $LockTimeoutSeconds second(s) acquiring bootstrap lock: $Path"
 }
 
 function Write-JsonAtomic {
@@ -69,13 +128,24 @@ $null = Require-Property -Object $capabilities -Name 'tools'
 $null = Require-Property -Object $capabilities -Name 'continuation'
 
 $taskSlug = ConvertTo-Slug -Value $taskId
-$stateRoot = Join-Path $Root 'orchestrator-state'
-$memoryRoot = Join-Path $stateRoot 'memory'
-$taskFile = Join-Path (Join-Path $stateRoot 'tasks') "$taskSlug.json"
-$statusPath = Join-Path $stateRoot 'bootstrap-status.json'
-$handoffPath = Join-Path $stateRoot 'handoff-manifest.json'
+$stateRoot = Assert-SafeDescendantPath -Base $Root -Candidate (Join-Path $Root 'orchestrator-state')
+$memoryRoot = Assert-SafeDescendantPath -Base $Root -Candidate (Join-Path $stateRoot 'memory')
+$taskFile = Assert-SafeDescendantPath -Base $Root -Candidate (Join-Path (Join-Path $stateRoot 'tasks') "$taskSlug.json")
+$statusPath = Assert-SafeDescendantPath -Base $Root -Candidate (Join-Path $stateRoot 'bootstrap-status.json')
+$handoffPath = Assert-SafeDescendantPath -Base $Root -Candidate (Join-Path $stateRoot 'handoff-manifest.json')
+$bootstrapLocksRoot = Assert-SafeDescendantPath -Base $Root -Candidate (Join-Path $stateRoot 'locks')
+$bootstrapLockPath = Assert-SafeDescendantPath -Base $Root -Candidate (Join-Path $bootstrapLocksRoot 'bootstrap.lock')
 $bundleHash = (Get-FileHash -LiteralPath $BundleFile -Algorithm SHA256).Hash.ToLowerInvariant()
 
+$deepPathProbe = Join-Path $memoryRoot 'purposes\123456789012345678901234\contents\123456789012345678901234\checkpoints\session-123456789012\cp-20991231T235959999Z-12345678.json'
+if ($env:OS -eq 'Windows_NT' -and -not (Test-Path -LiteralPath $statusPath) -and $deepPathProbe.Length -gt 248) {
+    throw "Bootstrap root is too long for safe deep-state paths on Windows. Choose a shorter root: $Root"
+}
+
+[IO.Directory]::CreateDirectory($bootstrapLocksRoot) | Out-Null
+$bootstrapLock = Enter-BootstrapLock -Path $bootstrapLockPath
+
+try {
 if (Test-Path -LiteralPath $statusPath) {
     $existingStatus = [IO.File]::ReadAllText($statusPath) | ConvertFrom-Json
     if ($existingStatus.status -eq 'complete' -and $existingStatus.bundle_hash -eq $bundleHash -and (Test-Path -LiteralPath $handoffPath)) {
@@ -91,7 +161,6 @@ if (Test-Path -LiteralPath $statusPath) {
     throw "Bootstrap state already exists and is not an identical completed bundle: $statusPath"
 }
 
-[IO.Directory]::CreateDirectory($stateRoot) | Out-Null
 $status = [ordered]@{
     schema_version = $SchemaVersion
     status = 'active'
@@ -177,4 +246,8 @@ catch {
     $status.error = $_.Exception.Message
     Write-JsonAtomic -Path $statusPath -Value $status
     throw
+}
+}
+finally {
+    if ($null -ne $bootstrapLock) { $bootstrapLock.Dispose() }
 }
