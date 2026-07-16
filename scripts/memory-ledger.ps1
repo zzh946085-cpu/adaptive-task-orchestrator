@@ -47,6 +47,12 @@ param(
     [ValidateRange(1, 36500)]
     [int]$RetentionDays = 365,
 
+    [ValidateRange(1, 300)]
+    [int]$LockTimeoutSeconds = 30,
+
+    [ValidateRange(10, 1000)]
+    [int]$LockRetryBaseMilliseconds = 40,
+
     [ValidateRange(0, 1000000)]
     [int]$ForkNumber = 0,
 
@@ -115,6 +121,17 @@ function Assert-ContainedPath {
     $candidateFull = Get-FullPath -Path $Candidate
     if (-not $candidateFull.StartsWith($baseFull, [StringComparison]::OrdinalIgnoreCase)) {
         throw "Path escapes ledger root: $candidateFull"
+    }
+    $current = $baseFull.TrimEnd([IO.Path]::DirectorySeparatorChar)
+    $relative = $candidateFull.Substring($baseFull.Length)
+    foreach ($segment in @($relative -split '[\\/]' | Where-Object { $_ })) {
+        $current = Join-Path $current $segment
+        if (Test-Path -LiteralPath $current) {
+            $item = Get-Item -LiteralPath $current -Force
+            if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "Path crosses a reparse point below the ledger root: $current"
+            }
+        }
     }
     return $candidateFull
 }
@@ -220,6 +237,9 @@ if ([string]::IsNullOrWhiteSpace($Root)) {
 }
 
 $Root = Get-FullPath -Path $Root
+if ($env:OS -eq 'Windows_NT' -and $Root.Length -gt 160) {
+    throw "Memory root is too long for safe deep-state paths on Windows: $Root"
+}
 $purposeSlug = ConvertTo-Slug -Value $Purpose
 $contentSlug = ConvertTo-Slug -Value $Content
 $purposePath = Assert-ContainedPath -Base $Root -Candidate (Join-Path $Root "purposes\$purposeSlug")
@@ -262,7 +282,8 @@ function Initialize-Directories {
 }
 
 function Enter-LedgerLock {
-    $deadline = [DateTime]::UtcNow.AddSeconds(8)
+    $deadline = [DateTime]::UtcNow.AddSeconds($LockTimeoutSeconds)
+    $attempt = 0
     while ([DateTime]::UtcNow -lt $deadline) {
         try {
             return [IO.File]::Open(
@@ -273,10 +294,15 @@ function Enter-LedgerLock {
             )
         }
         catch [IO.IOException] {
-            Start-Sleep -Milliseconds 80
+            $exponent = [Math]::Min($attempt, 5)
+            $maximum = [Math]::Min(1000, [int]($LockRetryBaseMilliseconds * [Math]::Pow(2, $exponent)))
+            $minimum = [Math]::Min($LockRetryBaseMilliseconds, $maximum)
+            $delay = if ($maximum -gt $minimum) { Get-Random -Minimum $minimum -Maximum ($maximum + 1) } else { $minimum }
+            Start-Sleep -Milliseconds $delay
+            $attempt++
         }
     }
-    throw "Timed out acquiring ledger lock: $lockPath"
+    throw "Timed out after $LockTimeoutSeconds second(s) acquiring ledger lock: $lockPath"
 }
 
 function Get-Manifest {

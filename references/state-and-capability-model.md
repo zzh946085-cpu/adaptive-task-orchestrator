@@ -42,6 +42,8 @@ Write `state/capabilities.json` for level 2 or 3 work. Use this shape:
 
 Record only observed capabilities. Use `false` or `null` for unverified support. Do not infer availability from a product name.
 
+For SQLite v3 state, record `runtime.node_sqlite`, the observed Node version, database path, local-filesystem status, and the successful verification command. If Node 22.5+, local disk, or write permission is unverified, select JSON v2 or stop before claiming transactional guarantees.
+
 ## Execution classes
 
 | Class | Parallel default | Checkpoint | Permission rule | Example |
@@ -72,6 +74,10 @@ Use one row per independently verifiable target state:
   "checkpoint_after": false,
   "retry_limit": 1,
   "retry_count": 0,
+  "attempt_id": null,
+  "owner_id": null,
+  "lease_expires_at": null,
+  "fencing_token": 0,
   "evidence_id": "E1",
   "evidence": [],
   "status": "pending",
@@ -81,6 +87,8 @@ Use one row per independently verifiable target state:
 ```
 
 Split any row with more than one acceptance condition. Never mark `passed` without evidence.
+
+Activation assigns an attempt, owner, lease expiry, and monotonically increasing fencing token. Record evidence only for an active row. Supply the attempt and owner across process boundaries, and reject stale evidence after another activation advances the fencing token.
 
 ## State transitions
 
@@ -96,6 +104,8 @@ failed -> abandoned
 ```
 
 Reject `pending -> passed` unless the row is a validated import of existing evidence. Reject retries after `retry_limit` without a changed hypothesis, input, or authorization.
+
+`NextReady` reports expired leases in `stale_active`. Reinspect the external state and idempotency key before failing or retrying a stale attempt.
 
 ## Freshness and refresh
 

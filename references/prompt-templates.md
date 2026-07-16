@@ -19,13 +19,19 @@ Stop conditions: <completion, real blocker, required authority>
 ## Difficult mathematics prompt
 
 ```text
-Solve <target>. Define symbols and domain first. Separate assumptions, derivation, and verification. Decompose into lemmas or transformations. Check boundary cases, signs, convergence, dimensional consistency, and one independent route when feasible. Return the result, validity conditions, expected behavior, equivalent forms, and any approximation error.
+Solve <target>. Extract objects, relations, environment, validity conditions, unknown or target, and output type. Classify the task as proof, solve, or exploration. Build a bounded Prime-Line Map from the given end and target end; do not assume the target value. Identify the bridge, then separate assumptions, derivation, and verification. Check boundary cases, signs, convergence, dimensional consistency, and one independent route when feasible. Return the compact map when useful, result, validity conditions, expected behavior, equivalent forms, and approximation error.
 ```
 
 ## Complex code prompt
 
 ```text
-Implement or diagnose <behavior> in <repository/path>. Inspect repository instructions, current state, dependencies, and tests first. Express the behavior as input -> state transition -> output. Identify invariants and failure cases. Make scoped changes, preserve unrelated edits, run proportional verification, and return changed paths, test evidence, expected runtime effects, and remaining risks.
+Implement or diagnose <behavior> in <repository/path>. Anchor the repository, revision, runtime, role, user objective, and expected output. Map observed behavior forward through falsifiable hypotheses and acceptance backward through invariants and tests. Inspect the smallest bridge that distinguishes the hypotheses. Express behavior as input -> state transition -> output, make scoped changes, preserve unrelated edits, run proportional verification, and return the compact map when useful, changed paths, test evidence, expected runtime effects, and remaining risks.
+```
+
+## Prime-line reasoning prompt
+
+```text
+Create a bounded Prime-Line Map for <problem>. Use numbered main nodes, primes for material branch depth, + or P for combined prerequisites, -> for forward transformation, <- for backward requirements, and | for alternatives. Include @context and @goal. For proof or diagnosis, make the two ends meet at a bridge. Treat candidate results as H until verified. Do not expose hidden chain-of-thought; return the compact map, decisive rationale, validity conditions, and verification evidence.
 ```
 
 ## Document operation prompt

@@ -23,6 +23,21 @@ Cap the score at 10.
 | 2: Difficult | 6-8 | Add explicit unknowns, invariants, evidence log, independent verification, expected effects, and a checkpoint if context is large. |
 | 3: Long/critical | 9-10 | Add the full task table, filesystem memory when authorized, reverse-goal verification, capability audit, recovery path, and wakeup plan when supported. |
 
+## Scale the reasoning map separately
+
+Use [reasoning-kernel.md](reasoning-kernel.md) without turning every task into a ledger:
+
+| Level | Prime-line behavior |
+|---|---|
+| 0 | No map for a direct fact. If explicitly requested, or if a compact map prevents ambiguity in a material multi-step relation, use two to four nodes and one prime maximum. |
+| 1 | Use a compact single line only when it prevents ambiguity in math, code, or causal explanation. Do not persist it. |
+| 2 | Use a two-end map for proof, diagnosis, or competing hypotheses. Use two primes maximum. |
+| 3 | Persist only the bridge, material rejected branches, decisions, and next action. Use three primes maximum. |
+
+Lower notation depth when the symbols cost more effort than the relation they expose.
+
+Treat competing hypotheses as a reason for a dual map even when the task ledger remains level 1. Map depth and task-state overhead are separate decisions.
+
 Activate a higher level regardless of score when the user explicitly requests persistent memory, scheduled continuation, a long task, or a full audit trail.
 
 ## Reduce or raise the level during execution
